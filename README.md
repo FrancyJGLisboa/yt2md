@@ -69,7 +69,8 @@ Behavior on batches:
   already exists in the target folder are skipped, so interrupting a long
   playlist and re-running the same command picks up where it left off.
 - **Failures never stop the batch** — failed URLs are reported, written to
-  `_failed.txt` in the output dir, and the run exits 1. Retry only the
+  `_failed.txt` at the `--out-dir` root (not inside playlist subfolders,
+  since one run can span several), and the run exits 1. Retry only the
   failures with `yt2md --from-file <out-dir>/_failed.txt`.
 - Manual captions are preferred over auto-generated when both exist.
 
