@@ -45,10 +45,17 @@ yt2md --out-dir ~/Transcripts PLAYLIST_URL   # → ~/Transcripts/<Playlist Name>
 yt2md --from-file urls.txt                   # one URL per line, # = comment
 yt2md --lang pt URL                          # Portuguese captions
 yt2md --limit 5 PLAYLIST_URL                 # first 5 videos only
+
+# no URL needed — search YouTube and transcribe the results
+yt2md --search "soybean market outlook" --search-limit 25
+yt2md --search "fed rate decision" --since 2026-05-01 --until 2026-06-01
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
+| `--search` | — | YouTube search query; results go to a `Search - <query>/` folder |
+| `--search-limit` | `10` | max search results to transcribe |
+| `--since` / `--until` | — | only videos uploaded inside this window (YYYY-MM-DD); applies to any input |
 | `--lang` | `en` | comma-separated caption language preference |
 | `--out-dir` | `.` | output directory; playlists get a subfolder |
 | `--interval` | `30` | seconds of speech per transcript paragraph |
@@ -65,6 +72,14 @@ Behavior on batches:
   `_failed.txt` in the output dir, and the run exits 1. Retry only the
   failures with `yt2md --from-file <out-dir>/_failed.txt`.
 - Manual captions are preferred over auto-generated when both exist.
+
+Date-window caveats: YouTube search doesn't expose upload dates cheaply, so
+`--since`/`--until` are enforced by checking each candidate's metadata —
+out-of-window videos still cost one metadata request each, and they are
+reported as skipped (never silently dropped). Search results are ranked by
+relevance, so a narrow window over a broad query may filter out most hits;
+raise `--search-limit` to compensate. Videos with no parseable upload date
+are kept.
 
 ## Troubleshooting
 

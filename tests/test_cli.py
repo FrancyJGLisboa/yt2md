@@ -7,7 +7,7 @@ import yt2md.cli as cli
 
 
 def make_args(**overrides):
-    defaults = dict(lang="en", interval=30, max_retries=2)
+    defaults = dict(lang="en", interval=30, max_retries=2, since=None, until=None)
     defaults.update(overrides)
     return types.SimpleNamespace(**defaults)
 
@@ -58,6 +58,60 @@ def test_process_video_no_retry_on_fatal_error(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="unavailable"):
         cli.process_video("FAKEID12345", tmp_path, make_args())
     assert len(calls) == 1
+
+
+def test_date_arg_parses_and_rejects():
+    assert cli.date_arg("2026-03-01") == "20260301"
+    with pytest.raises(Exception):
+        cli.date_arg("03/01/2026")
+
+
+def test_in_window():
+    assert cli.in_window("20260315", "20260301", "20260415")
+    assert not cli.in_window("20260228", "20260301", None)
+    assert not cli.in_window("20260501", None, "20260415")
+    assert cli.in_window("", "20260301", "20260415")  # unknown date kept
+    assert cli.in_window("20260315", None, None)
+
+
+def test_process_video_filters_outside_window(tmp_path, monkeypatch):
+    def fake_fetch(vid, langs, tmpdir):
+        return {"id": vid, "title": "Old Video", "upload_date": "20200101",
+                "subtitles": {}}, None, ""
+
+    monkeypatch.setattr(cli, "fetch", fake_fetch)
+    args = make_args(since="20260101")
+    assert cli.process_video("VID1", tmp_path, args) is None
+    assert not list(tmp_path.glob("*.md"))  # nothing written
+
+    args = make_args(since="20190101", until="20210101")
+    out = cli.process_video("VID1", tmp_path, args)
+    assert out is not None and out.exists()
+
+
+def test_main_search_creates_query_folder(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "expand", lambda q: ("kw", ["AAA", "BBB"]))
+    monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
+    paths = []
+
+    def fake_process(vid, target, args):
+        p = target / f"t [{vid}].md"
+        target.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+        paths.append(p)
+        return p
+
+    monkeypatch.setattr(cli, "process_video", fake_process)
+    rc = cli.main(["--search", "soy outlook", "--out-dir", str(tmp_path), "--sleep", "0"])
+    assert rc == 0
+    assert all(p.parent.name == "Search - soy outlook" for p in paths)
+    assert len(paths) == 2
+    assert "search 'soy outlook': 2 results" in capsys.readouterr().out
+
+
+def test_main_requires_some_input(monkeypatch):
+    with pytest.raises(SystemExit):
+        cli.main([])
 
 
 def test_process_video_writes_transcript(tmp_path, monkeypatch):
