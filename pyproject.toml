@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Extract YouTube transcripts as Markdown with clickable timestamps"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Francy Lisboa Charuto", email = "agrolisboa@gmail.com" }]
 dependencies = [
     "yt-dlp[default,curl-cffi]>=2025.10.22",
