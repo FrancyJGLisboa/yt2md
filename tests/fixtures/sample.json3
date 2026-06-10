@@ -1,0 +1,11 @@
+{
+  "wireMagic": "pb3",
+  "events": [
+    {"tStartMs": 0, "dDurationMs": 2000, "segs": [{"utf8": "hello "}, {"utf8": "world"}]},
+    {"tStartMs": 1500, "dDurationMs": 10, "segs": [{"utf8": "\n"}]},
+    {"tStartMs": 2000, "dDurationMs": 3000, "aAppend": 1, "segs": [{"utf8": "second   line\n"}]},
+    {"tStartMs": 5000, "dDurationMs": 1000},
+    {"tStartMs": 35000, "dDurationMs": 2000, "segs": [{"utf8": "after the gap"}]},
+    {"tStartMs": 70000, "dDurationMs": 2000, "segs": [{"utf8": "final words"}]}
+  ]
+}
