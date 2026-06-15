@@ -46,7 +46,8 @@ def process_video(video_id: str, out_dir: Path, args) -> Path | None:
     for attempt in range(args.max_retries + 1):
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
-                info, sub_path, lang = fetch(video_id, args.lang, tmpdir)
+                info, sub_path, lang = fetch(video_id, args.lang, tmpdir,
+                                             args.cookies_from_browser)
                 if not in_window(info.get("upload_date", ""), args.since, args.until):
                     return None
                 cues = parse_json3(sub_path) if sub_path else []
@@ -96,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="seconds between videos (default: 3)")
     parser.add_argument("--max-retries", type=int, default=2,
                         help="retries per video on rate limit (default: 2)")
+    parser.add_argument("--cookies-from-browser", default=None, metavar="BROWSER",
+                        help="load cookies from a browser (e.g. firefox, chrome, "
+                             "safari) to pass YouTube bot/sign-in checks")
     args = parser.parse_args(argv)
 
     urls = list(args.urls)
@@ -127,7 +131,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.search:
         try:
-            _, ids = expand(f"ytsearch{args.search_limit}:{args.search}")
+            _, ids = expand(f"ytsearch{args.search_limit}:{args.search}",
+                            args.cookies_from_browser)
             print(f"search '{args.search}': {len(ids)} results")
             # deterministic folder name so re-running the same search resumes
             add_jobs(ids, out_root / safe_name(f"Search - {args.search}", "search"))
@@ -137,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for url in urls:
         try:
-            playlist_title, ids = expand(url)
+            playlist_title, ids = expand(url, args.cookies_from_browser)
         except RuntimeError as exc:
             print(f"FAILED to resolve {url}: {exc}", file=sys.stderr)
             failed.append(url)

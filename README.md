@@ -62,6 +62,7 @@ yt2md --search "fed rate decision" --since 2026-05-01 --until 2026-06-01
 | `--limit` | none | max videos taken from each playlist |
 | `--sleep` | `3` | pause between videos (rate-limit politeness) |
 | `--max-retries` | `2` | retries per video on HTTP 429 (15s/60s/240s backoff) |
+| `--cookies-from-browser` | — | load cookies from a browser (`firefox`, `chrome`, `safari`, …) to pass YouTube bot/sign-in checks on large batches |
 
 Behavior on batches:
 

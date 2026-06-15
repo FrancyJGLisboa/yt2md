@@ -22,9 +22,15 @@ def missing_js_runtime() -> bool:
     return not any(shutil.which(rt) for rt in JS_RUNTIMES)
 
 
-def expand(url: str) -> tuple[str | None, list[str]]:
+def cookies_args(cookies_from_browser: str | None) -> list[str]:
+    """yt-dlp --cookies-from-browser passthrough (empty when not requested)."""
+    return ["--cookies-from-browser", cookies_from_browser] if cookies_from_browser else []
+
+
+def expand(url: str, cookies_from_browser: str | None = None) -> tuple[str | None, list[str]]:
     """Resolve a URL to (playlist_title | None, [video_id, ...])."""
-    cmd = ytdlp_cmd("--flat-playlist", "-J", "--no-warnings", url)
+    cmd = ytdlp_cmd("--flat-playlist", "-J", "--no-warnings",
+                    *cookies_args(cookies_from_browser), url)
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"could not resolve {url}:\n{result.stderr.strip()}")
@@ -35,7 +41,8 @@ def expand(url: str) -> tuple[str | None, list[str]]:
     return None, [data["id"]]
 
 
-def fetch(video_id: str, langs: str, tmpdir: str) -> tuple[dict, Path | None, str]:
+def fetch(video_id: str, langs: str, tmpdir: str,
+          cookies_from_browser: str | None = None) -> tuple[dict, Path | None, str]:
     """Download info.json + subtitles. Returns (info, sub_path, lang)."""
     # exact lang + "-orig" variant only — a wildcard like "en.*" matches every
     # auto-translated track (en-de, en-fr, ...) and triggers HTTP 429
@@ -46,6 +53,7 @@ def fetch(video_id: str, langs: str, tmpdir: str) -> tuple[dict, Path | None, st
         "--skip-download", "--write-info-json",
         "--write-subs", "--write-auto-subs",
         "--sub-langs", sub_langs, "--sub-format", "json3",
+        *cookies_args(cookies_from_browser),
         "-o", "%(id)s.%(ext)s", "-P", tmpdir, "--no-progress",
         f"https://www.youtube.com/watch?v={video_id}",
     )
