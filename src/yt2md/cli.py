@@ -1,6 +1,7 @@
 """CLI: batch orchestration, search, date filtering, resume, retry/backoff."""
 
 import argparse
+import random
 import re
 import sys
 import tempfile
@@ -47,7 +48,8 @@ def process_video(video_id: str, out_dir: Path, args) -> Path | None:
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 info, sub_path, lang = fetch(video_id, args.lang, tmpdir,
-                                             args.cookies_from_browser)
+                                             args.cookies_from_browser,
+                                             args.player_client)
                 if not in_window(info.get("upload_date", ""), args.since, args.until):
                     return None
                 cues = parse_json3(sub_path) if sub_path else []
@@ -100,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cookies-from-browser", default=None, metavar="BROWSER",
                         help="load cookies from a browser (e.g. firefox, chrome, "
                              "safari) to pass YouTube bot/sign-in checks")
+    parser.add_argument("--player-client", default=None, metavar="CLIENT",
+                        help="opt-in: yt-dlp youtube player_client(s) to impersonate "
+                             "(e.g. 'web_safari,mweb') — a different quota bucket that "
+                             "often dodges 429. Brittle; off by default")
     args = parser.parse_args(argv)
 
     urls = list(args.urls)
@@ -132,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.search:
         try:
             _, ids = expand(f"ytsearch{args.search_limit}:{args.search}",
-                            args.cookies_from_browser)
+                            args.cookies_from_browser, args.player_client)
             print(f"search '{args.search}': {len(ids)} results")
             # deterministic folder name so re-running the same search resumes
             add_jobs(ids, out_root / safe_name(f"Search - {args.search}", "search"))
@@ -142,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for url in urls:
         try:
-            playlist_title, ids = expand(url, args.cookies_from_browser)
+            playlist_title, ids = expand(url, args.cookies_from_browser, args.player_client)
         except RuntimeError as exc:
             print(f"FAILED to resolve {url}: {exc}", file=sys.stderr)
             failed.append(url)
@@ -165,7 +171,9 @@ def main(argv: list[str] | None = None) -> int:
             skipped += 1
             continue
         if (written or filtered) and args.sleep:
-            time.sleep(args.sleep)
+            # jitter the cadence: a fixed interval is a regular, bot-detectable
+            # metronome; uniform 0.6x–1.6x spreads it without changing the mean much.
+            time.sleep(args.sleep * random.uniform(0.6, 1.6))
         url = f"https://www.youtube.com/watch?v={vid}"
         try:
             path = process_video(vid, target, args)

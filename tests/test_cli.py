@@ -8,7 +8,7 @@ import yt2md.cli as cli
 
 def make_args(**overrides):
     defaults = dict(lang="en", interval=30, max_retries=2, since=None, until=None,
-                    cookies_from_browser=None)
+                    cookies_from_browser=None, player_client=None)
     defaults.update(overrides)
     return types.SimpleNamespace(**defaults)
 
@@ -23,7 +23,7 @@ def test_existing_transcript_matches_id_suffix(tmp_path):
 def test_process_video_retries_on_429(tmp_path, monkeypatch):
     calls, sleeps = [], []
 
-    def fake_fetch(vid, langs, tmpdir, cookies=None):
+    def fake_fetch(vid, langs, tmpdir, cookies=None, player_client=None):
         calls.append(vid)
         if len(calls) <= 2:
             raise RuntimeError("ERROR: HTTP Error 429: Too Many Requests")
@@ -51,7 +51,7 @@ def test_process_video_gives_up_after_max_retries(tmp_path, monkeypatch):
 def test_process_video_no_retry_on_fatal_error(tmp_path, monkeypatch):
     calls = []
 
-    def fatal_fetch(vid, langs, tmpdir, cookies=None):
+    def fatal_fetch(vid, langs, tmpdir, cookies=None, player_client=None):
         calls.append(vid)
         raise RuntimeError("ERROR: Video unavailable")
 
@@ -76,7 +76,7 @@ def test_in_window():
 
 
 def test_process_video_filters_outside_window(tmp_path, monkeypatch):
-    def fake_fetch(vid, langs, tmpdir, cookies=None):
+    def fake_fetch(vid, langs, tmpdir, cookies=None, player_client=None):
         return {"id": vid, "title": "Old Video", "upload_date": "20200101",
                 "subtitles": {}}, None, ""
 
@@ -91,7 +91,7 @@ def test_process_video_filters_outside_window(tmp_path, monkeypatch):
 
 
 def test_main_search_creates_query_folder(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "expand", lambda q, c=None: ("kw", ["AAA", "BBB"]))
+    monkeypatch.setattr(cli, "expand", lambda q, c=None, pc=None: ("kw", ["AAA", "BBB"]))
     monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
     paths = []
 
@@ -113,21 +113,25 @@ def test_main_search_creates_query_folder(tmp_path, monkeypatch, capsys):
 def test_main_threads_cookies_to_expand_and_fetch(tmp_path, monkeypatch):
     captured = {}
 
-    def fake_expand(url, cookies_from_browser=None):
+    def fake_expand(url, cookies_from_browser=None, player_client=None):
         captured["expand"] = cookies_from_browser
+        captured["expand_pc"] = player_client
         return ("pl", ["AAA"])
 
     def fake_process(vid, target, args):
         captured["fetch"] = args.cookies_from_browser
+        captured["fetch_pc"] = args.player_client
         return None
 
     monkeypatch.setattr(cli, "expand", fake_expand)
     monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
     monkeypatch.setattr(cli, "process_video", fake_process)
     cli.main(["http://x", "--out-dir", str(tmp_path), "--sleep", "0",
-              "--cookies-from-browser", "firefox"])
+              "--cookies-from-browser", "firefox", "--player-client", "web_safari,mweb"])
     assert captured["expand"] == "firefox"
     assert captured["fetch"] == "firefox"
+    assert captured["expand_pc"] == "web_safari,mweb"
+    assert captured["fetch_pc"] == "web_safari,mweb"
 
 
 def test_main_requires_some_input(monkeypatch):
@@ -136,7 +140,7 @@ def test_main_requires_some_input(monkeypatch):
 
 
 def test_process_video_writes_transcript(tmp_path, monkeypatch):
-    def fake_fetch(vid, langs, tmpdir, cookies=None):
+    def fake_fetch(vid, langs, tmpdir, cookies=None, player_client=None):
         sub = Path(tmpdir) / f"{vid}.en.json3"
         sub.write_text('{"events": [{"tStartMs": 0, "segs": [{"utf8": "hello"}]}]}')
         info = {"id": vid, "title": "A/B|C", "subtitles": {"en": []}, "duration": 5}

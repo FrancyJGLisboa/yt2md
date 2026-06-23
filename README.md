@@ -60,9 +60,10 @@ yt2md --search "fed rate decision" --since 2026-05-01 --until 2026-06-01
 | `--out-dir` | `.` | output directory; playlists get a subfolder |
 | `--interval` | `30` | seconds of speech per transcript paragraph |
 | `--limit` | none | max videos taken from each playlist |
-| `--sleep` | `3` | pause between videos (rate-limit politeness) |
+| `--sleep` | `3` | pause between videos, jittered 0.6–1.6× (rate-limit politeness) |
 | `--max-retries` | `2` | retries per video on HTTP 429 (15s/60s/240s backoff) |
 | `--cookies-from-browser` | — | load cookies from a browser (`firefox`, `chrome`, `safari`, …) to pass YouTube bot/sign-in checks on large batches |
+| `--player-client` | — | opt-in: yt-dlp `youtube` player client(s) to impersonate (e.g. `web_safari,mweb`) — a different quota bucket that often dodges 429. Brittle; off by default |
 
 Behavior on batches:
 
@@ -87,8 +88,11 @@ are kept.
 
 - **"No supported JavaScript runtime"** — install deno (see above).
 - **HTTP 429 Too Many Requests** — YouTube rate-limited you. yt2md already
-  retries with backoff and paces requests; if it persists, wait a few
-  minutes or raise `--sleep`.
+  throttles at the request level (`--sleep-requests`/`--sleep-subtitles`),
+  jitters the between-video pause, and retries with backoff. If it persists,
+  in rough order of effectiveness: pass `--cookies-from-browser` (authenticated
+  requests have far higher limits), try `--player-client web_safari,mweb`,
+  raise `--sleep`, or wait a few minutes and re-run (it resumes).
 
 ## Development
 
