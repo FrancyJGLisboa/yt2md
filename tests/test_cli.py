@@ -134,6 +134,55 @@ def test_main_threads_cookies_to_expand_and_fetch(tmp_path, monkeypatch):
     assert captured["fetch_pc"] == "web_safari,mweb"
 
 
+def test_circuit_breaker_aborts_on_consecutive_429(tmp_path, monkeypatch):
+    calls = []
+
+    def boom(vid, target, args):
+        calls.append(vid)
+        raise RuntimeError("ERROR: HTTP Error 429: Too Many Requests")
+
+    monkeypatch.setattr(cli, "expand", lambda u, c=None, pc=None: ("pl", list("ABCDE")))
+    monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
+    monkeypatch.setattr(cli, "process_video", boom)
+    rc = cli.main(["http://x", "--out-dir", str(tmp_path), "--sleep", "0"])
+    assert rc == 2  # nothing written
+    assert len(calls) == cli.CONSECUTIVE_429_LIMIT  # stopped early, didn't grind all 5
+    queued = (tmp_path / "_failed.txt").read_text().strip().splitlines()
+    assert len(queued) == 5  # 3 attempted + 2 unattempted, all queued for resume
+
+
+def test_circuit_breaker_resets_on_success(tmp_path, monkeypatch):
+    """A 429 between successes must not accumulate toward the abort threshold."""
+    seq = iter([
+        RuntimeError("429"), None,  # fail, then a real video
+        RuntimeError("429"), None,
+        RuntimeError("429"), None,
+    ])
+
+    def flaky(vid, target, args):
+        item = next(seq)
+        if isinstance(item, Exception):
+            raise item
+        p = target / f"t [{vid}].md"
+        target.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+        return p
+
+    monkeypatch.setattr(cli, "expand", lambda u, c=None, pc=None: ("pl", list("ABCDEF")))
+    monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
+    monkeypatch.setattr(cli, "process_video", flaky)
+    rc = cli.main(["http://x", "--out-dir", str(tmp_path), "--sleep", "0"])
+    assert rc == 1  # partial: 3 written, 3 failed — but NOT aborted early
+
+
+def test_empty_run_exits_nonzero_when_all_filtered(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "expand", lambda u, c=None, pc=None: ("pl", ["A"]))
+    monkeypatch.setattr(cli, "missing_js_runtime", lambda: False)
+    monkeypatch.setattr(cli, "process_video", lambda vid, target, args: None)
+    rc = cli.main(["http://x", "--out-dir", str(tmp_path), "--sleep", "0"])
+    assert rc == 2  # 0 written must not look like success
+
+
 def test_main_requires_some_input(monkeypatch):
     with pytest.raises(SystemExit):
         cli.main([])

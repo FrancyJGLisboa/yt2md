@@ -12,6 +12,7 @@ from .subs import expand, fetch, missing_js_runtime, parse_json3
 from .render import render, safe_name
 
 RETRY_BACKOFF_S = [15, 60, 240]  # wait per retry attempt on HTTP 429
+CONSECUTIVE_429_LIMIT = 3  # abort the batch after this many 429s in a row
 
 
 def date_arg(value: str) -> str:
@@ -164,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
     written: list[Path] = []
     skipped = 0
     filtered = 0
+    consecutive_429 = 0
+    rate_limited = False
     for i, (vid, target) in enumerate(jobs):
         already = existing_transcript(target, vid)
         if already:
@@ -177,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         url = f"https://www.youtube.com/watch?v={vid}"
         try:
             path = process_video(vid, target, args)
+            consecutive_429 = 0  # any non-429 outcome breaks the streak
             if path is None:
                 print(f"[{i + 1}/{len(jobs)}] skip (outside {args.since or '...'}"
                       f"..{args.until or '...'} window): {url}")
@@ -187,6 +191,24 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"[{i + 1}/{len(jobs)}] FAILED {url}: {exc}", file=sys.stderr)
             failed.append(url)
+            # Circuit-breaker: each failure here already exhausted per-video
+            # retries. A run of them means we're being throttled wholesale —
+            # stop grinding backoff per video and bail with an actionable hint.
+            if "429" in str(exc) or "Too Many Requests" in str(exc):
+                consecutive_429 += 1
+                if consecutive_429 >= CONSECUTIVE_429_LIMIT:
+                    remaining = [f"https://www.youtube.com/watch?v={v}"
+                                 for v, _ in jobs[i + 1:]]
+                    failed.extend(remaining)
+                    rate_limited = True
+                    print(f"\nAborting: {consecutive_429} consecutive rate-limit (429) "
+                          f"failures — {len(remaining)} videos left unattempted.\n"
+                          f"Re-run with --cookies-from-browser (authenticated requests "
+                          f"have far higher limits); already-saved videos are skipped, "
+                          f"so it resumes.", file=sys.stderr)
+                    break
+            else:
+                consecutive_429 = 0
 
     window_note = f", {filtered} outside date window" if (args.since or args.until) else ""
     print(f"\ndone: {len(written)} written, {skipped} skipped (already existed)"
@@ -197,6 +219,21 @@ def main(argv: list[str] | None = None) -> int:
         failed_file.write_text("\n".join(failed) + "\n")
         print(f"failed URLs saved to {failed_file} — retry with: "
               f"yt2md --from-file '{failed_file}'", file=sys.stderr)
+
+    # Never exit 0 having transcribed nothing — a silent empty run looks like
+    # success and produces a hollow downstream artifact. Name the cause.
+    if not written:
+        if rate_limited:
+            reason = "all attempts were rate-limited (429) — see --cookies-from-browser"
+        elif filtered and not failed:
+            reason = "every candidate fell outside the --since/--until window"
+        elif failed:
+            reason = "every candidate failed to download"
+        else:
+            reason = "no videos resolved from the input"
+        print(f"\nWARNING: 0 transcripts written — {reason}.", file=sys.stderr)
+        return 2
+
     return 1 if failed else 0
 
 
