@@ -74,6 +74,14 @@ Behavior on batches:
   `_failed.txt` at the `--out-dir` root (not inside playlist subfolders,
   since one run can span several), and the run exits 1. Retry only the
   failures with `yt2md --from-file <out-dir>/_failed.txt`.
+- **Circuit-breaker** — after 3 consecutive HTTP 429 failures the batch
+  aborts early (rather than grinding backoff on every remaining video); the
+  unattempted videos are queued into `_failed.txt` so a re-run resumes them.
+  The hint: re-run with `--cookies-from-browser`.
+- **Exit codes** — `0` success, `1` finished with some failures, `2` wrote
+  **zero** transcripts (empty/degraded run — the reason is printed, e.g. all
+  filtered by date window, all 429, or no input resolved). `2` exists so a
+  hollow run can't masquerade as success in a script or pipeline.
 - Manual captions are preferred over auto-generated when both exist.
 
 Date-window caveats: YouTube search doesn't expose upload dates cheaply, so
