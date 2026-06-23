@@ -5,9 +5,11 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 JS_RUNTIMES = ("deno", "node", "bun", "qjs")
+YTDLP_STALE_DAYS = 45  # YouTube extraction tends to break past this age
 
 
 def ytdlp_cmd(*args: str) -> list[str]:
@@ -20,6 +22,32 @@ def missing_js_runtime() -> bool:
     """YouTube extraction needs a JS runtime (deno by default) since 2025;
     without one, subtitle downloads fail."""
     return not any(shutil.which(rt) for rt in JS_RUNTIMES)
+
+
+def ytdlp_version() -> str | None:
+    """The installed yt-dlp's version string (a YYYY.MM.DD date), or None."""
+    try:
+        r = subprocess.run(ytdlp_cmd("--version"), capture_output=True,
+                           text=True, timeout=15)
+        return r.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def stale_ytdlp_warning(today: date | None = None) -> str | None:
+    """yt-dlp versions are release dates; a stale one is the #1 cause of
+    silent extraction breakage as YouTube changes. Returns an upgrade hint
+    when the installed version is older than YTDLP_STALE_DAYS, else None."""
+    v = ytdlp_version()
+    m = re.match(r"(\d{4})\.(\d{2})\.(\d{2})", v or "")
+    if not m:
+        return None
+    released = date(int(m[1]), int(m[2]), int(m[3]))
+    age = ((today or date.today()) - released).days
+    if age > YTDLP_STALE_DAYS:
+        return (f"yt-dlp is {age} days old ({v}) — stale yt-dlp silently breaks "
+                f"YouTube extraction. Upgrade: uv tool upgrade yt2md")
+    return None
 
 
 def cookies_args(cookies_from_browser: str | None) -> list[str]:
