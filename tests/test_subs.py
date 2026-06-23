@@ -99,6 +99,19 @@ def test_player_client_opt_in(monkeypatch, tmp_path):
     assert "youtube:player_client=web_safari,mweb" in captured["cmd"]
 
 
+def test_stale_ytdlp_warning(monkeypatch):
+    from datetime import date
+
+    monkeypatch.setattr(subs, "ytdlp_version", lambda: "2026.01.01")
+    assert subs.stale_ytdlp_warning(today=date(2026, 6, 23)) is not None  # ~173 days
+
+    monkeypatch.setattr(subs, "ytdlp_version", lambda: "2026.06.09")
+    assert subs.stale_ytdlp_warning(today=date(2026, 6, 23)) is None  # 14 days, fresh
+
+    monkeypatch.setattr(subs, "ytdlp_version", lambda: None)  # probe failed
+    assert subs.stale_ytdlp_warning(today=date(2026, 6, 23)) is None  # no false alarm
+
+
 def test_parse_json3_extracts_cues():
     cues = parse_json3(FIXTURE)
     assert cues == [

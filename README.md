@@ -95,6 +95,9 @@ are kept.
 ## Troubleshooting
 
 - **"No supported JavaScript runtime"** — install deno (see above).
+- **Extraction suddenly returns nothing / cryptic errors** — almost always a
+  stale yt-dlp; YouTube changes often. yt2md warns at startup when yt-dlp is
+  >45 days old. Fix: `uv tool upgrade yt2md`.
 - **HTTP 429 Too Many Requests** — YouTube rate-limited you. yt2md already
   throttles at the request level (`--sleep-requests`/`--sleep-subtitles`),
   jitters the between-video pause, and retries with backoff. If it persists,

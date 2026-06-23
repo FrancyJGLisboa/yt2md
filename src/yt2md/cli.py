@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .subs import expand, fetch, missing_js_runtime, parse_json3
+from .subs import expand, fetch, missing_js_runtime, parse_json3, stale_ytdlp_warning
 from .render import render, safe_name
 
 RETRY_BACKOFF_S = [15, 60, 240]  # wait per retry attempt on HTTP 429
@@ -122,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         print("warning: no JavaScript runtime found — YouTube extraction needs one.\n"
               "         install deno:  brew install deno  (macOS)  or see\n"
               "         https://github.com/yt-dlp/yt-dlp/wiki/EJS", file=sys.stderr)
+    if (stale := stale_ytdlp_warning()):
+        print(f"warning: {stale}", file=sys.stderr)
 
     out_root = Path(args.out_dir).expanduser()
 
