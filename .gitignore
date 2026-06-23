@@ -5,3 +5,5 @@ dist/
 *.egg-info/
 .pytest_cache/
 uv.lock
+.DS_Store
+transcripts/

@@ -27,9 +27,30 @@ def cookies_args(cookies_from_browser: str | None) -> list[str]:
     return ["--cookies-from-browser", cookies_from_browser] if cookies_from_browser else []
 
 
-def expand(url: str, cookies_from_browser: str | None = None) -> tuple[str | None, list[str]]:
+def throttle_args(subtitles: bool = False) -> list[str]:
+    """Native yt-dlp request-level throttling. Paces the multiple HTTP requests
+    *inside* a single yt-dlp call — the burst that actually trips HTTP 429 —
+    which a between-video sleep in the caller structurally cannot reach.
+    --retry-sleep backs off exponentially (1s..60s) on yt-dlp's own 429s."""
+    args = ["--sleep-requests", "0.75", "--retry-sleep", "http:exp=1:60"]
+    if subtitles:
+        args += ["--sleep-subtitles", "3"]
+    return args
+
+
+def player_client_args(player_client: str | None) -> list[str]:
+    """Opt-in: impersonate specific YouTube client(s), e.g. "web_safari,mweb".
+    A different client hits a different quota bucket and often dodges 429.
+    Off by default — which clients work shifts as yt-dlp updates."""
+    return (["--extractor-args", f"youtube:player_client={player_client}"]
+            if player_client else [])
+
+
+def expand(url: str, cookies_from_browser: str | None = None,
+           player_client: str | None = None) -> tuple[str | None, list[str]]:
     """Resolve a URL to (playlist_title | None, [video_id, ...])."""
     cmd = ytdlp_cmd("--flat-playlist", "-J", "--no-warnings",
+                    *throttle_args(), *player_client_args(player_client),
                     *cookies_args(cookies_from_browser), url)
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -42,7 +63,8 @@ def expand(url: str, cookies_from_browser: str | None = None) -> tuple[str | Non
 
 
 def fetch(video_id: str, langs: str, tmpdir: str,
-          cookies_from_browser: str | None = None) -> tuple[dict, Path | None, str]:
+          cookies_from_browser: str | None = None,
+          player_client: str | None = None) -> tuple[dict, Path | None, str]:
     """Download info.json + subtitles. Returns (info, sub_path, lang)."""
     # exact lang + "-orig" variant only — a wildcard like "en.*" matches every
     # auto-translated track (en-de, en-fr, ...) and triggers HTTP 429
@@ -53,6 +75,7 @@ def fetch(video_id: str, langs: str, tmpdir: str,
         "--skip-download", "--write-info-json",
         "--write-subs", "--write-auto-subs",
         "--sub-langs", sub_langs, "--sub-format", "json3",
+        *throttle_args(subtitles=True), *player_client_args(player_client),
         *cookies_args(cookies_from_browser),
         "-o", "%(id)s.%(ext)s", "-P", tmpdir, "--no-progress",
         f"https://www.youtube.com/watch?v={video_id}",

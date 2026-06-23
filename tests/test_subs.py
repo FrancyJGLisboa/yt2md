@@ -58,6 +58,47 @@ def test_fetch_passes_cookies_from_browser(monkeypatch, tmp_path):
     assert "chrome" in captured["cmd"]
 
 
+def test_throttle_args_reach_expand_and_fetch(monkeypatch, tmp_path):
+    """Request-level throttling must be on every yt-dlp call (checks 2-3)."""
+    captured = {}
+
+    def fake_run(cmd, capture_output, text):
+        captured["cmd"] = cmd
+        (tmp_path / "vid.info.json").write_text('{"id": "vid", "title": "T", "subtitles": {}}')
+        return types.SimpleNamespace(
+            returncode=0, stdout='{"_type": "video", "id": "a"}', stderr="")
+
+    monkeypatch.setattr(subs.subprocess, "run", fake_run)
+
+    subs.expand("http://x")
+    assert "--sleep-requests" in captured["cmd"]
+    assert "--retry-sleep" in captured["cmd"]
+    assert "--sleep-subtitles" not in captured["cmd"]  # only meaningful for subtitle fetch
+
+    subs.fetch("vid", "en", str(tmp_path))
+    assert "--sleep-requests" in captured["cmd"]
+    assert "--sleep-subtitles" in captured["cmd"]
+
+
+def test_player_client_opt_in(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(cmd, capture_output, text):
+        captured["cmd"] = cmd
+        (tmp_path / "vid.info.json").write_text('{"id": "vid", "title": "T", "subtitles": {}}')
+        return types.SimpleNamespace(
+            returncode=0, stdout='{"_type": "video", "id": "a"}', stderr="")
+
+    monkeypatch.setattr(subs.subprocess, "run", fake_run)
+
+    subs.fetch("vid", "en", str(tmp_path))  # default: no client override
+    assert "--extractor-args" not in captured["cmd"]
+
+    subs.fetch("vid", "en", str(tmp_path), player_client="web_safari,mweb")
+    assert "--extractor-args" in captured["cmd"]
+    assert "youtube:player_client=web_safari,mweb" in captured["cmd"]
+
+
 def test_parse_json3_extracts_cues():
     cues = parse_json3(FIXTURE)
     assert cues == [
